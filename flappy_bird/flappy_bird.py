@@ -18,6 +18,9 @@ class GameState():
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
                     bird.y_movement = -6
+                if event.key == pygame.K_TAB:
+                    global DEBUG
+                    DEBUG = not DEBUG
             if event.type == CREATE_PIPE:
                 pipe_pos_y = random.choice(pipe_height)
                 pipe_group.add(Pipe(True, pipe_pos_y))
@@ -34,6 +37,9 @@ class GameState():
         floor_group.update()
         bird_group.draw(screen)
         bird_group.update(gravity)
+        global score
+        score += 0.01
+        score_display(self.state)
         pygame.display.update()
 
     def game_over(self):
@@ -49,10 +55,13 @@ class GameState():
                     bird.y_movement = 0
                     pygame.time.set_timer(CREATE_PIPE, 0) # remove the timer
                     pygame.time.set_timer(CREATE_PIPE, 1200)
+                    global score
+                    score = 0
                     
         screen.blit(bg_surface, (0, 0))
         floor_group.draw(screen)
         floor_group.update()
+        score_display(self.state)
         pygame.display.update()
 
 class Floor(pygame.sprite.Sprite):
@@ -85,7 +94,8 @@ class Bird(pygame.sprite.Sprite):
     
     def update(self, gravity):
         if self.rect.top <= -50 or self.rect.bottom >= 450:
-            game_state.state = "game_over"
+            if not DEBUG:
+                game_state.state = "game_over"
         
         self.regular_image = self.sprites[int(self.current_sprite)]
         self.y_movement += gravity
@@ -96,8 +106,7 @@ class Bird(pygame.sprite.Sprite):
     def rotate(self, bird):
         rotated_bird = pygame.transform.rotozoom(bird, -self.y_movement * 5, 1)
         rotated_bird_rect = rotated_bird.get_rect(center = (50, self.y_pos))
-        return rotated_bird, rotated_bird_rect
-        
+        return rotated_bird, rotated_bird_rect        
 
 class Pipe(pygame.sprite.Sprite):
     def __init__(self, is_bottom, pipe_pos_y):
@@ -115,7 +124,8 @@ class Pipe(pygame.sprite.Sprite):
 
     def update(self):
         if self.rect.colliderect(bird.rect):
-            game_state.state = "game_over"
+            if not DEBUG:
+                game_state.state = "game_over"
         self.pos_x -= 2.5
         if self.is_bottom:
             self.rect = self.image.get_rect(midtop = (self.pos_x, self.pos_y))
@@ -123,21 +133,40 @@ class Pipe(pygame.sprite.Sprite):
             self.image = self.flip_image
             self.rect = self.image.get_rect(midbottom = (self.pos_x, self.pos_y))
 
+def score_display(state):
+    if state == "game":
+        score_surface = game_font.render(str(int(score)), True, "white")
+        score_rect = score_surface.get_rect(center = (144, 50))
+        screen.blit(score_surface, score_rect)
+    if state == "game_over":
+        global high_score
+        high_score = max(score, high_score)
+        score_surface = game_font.render("Score: " + str(int(score)), True, "white")
+        score_rect = score_surface.get_rect(center = (144, 50))
+        screen.blit(score_surface, score_rect)
+        high_score_surface = game_font.render("High Score: " + str(int(high_score)), True, "white")
+        high_score_rect = high_score_surface.get_rect(center = (144, 425))
+        screen.blit(high_score_surface, high_score_rect)  
+
 # Basic Setup
 pygame.init()
 screen_width = 288
 screen_height = 512
 screen = pygame.display.set_mode((screen_width, screen_height))
 clock = pygame.time.Clock()
+game_font = pygame.font.Font("fonts/04B_19.ttf", 20)
 
 # Gane Variables
 game_state = GameState()
 gravity = 0.125
+pipe_height = [200, 300, 400]
 CREATE_PIPE = pygame.USEREVENT + 0
 BIRD_FLAP = pygame.USEREVENT + 1
-pipe_height = [200, 300, 400]
 pygame.time.set_timer(CREATE_PIPE, 1200)
 pygame.time.set_timer(BIRD_FLAP, 200)
+DEBUG = False
+score = 0
+high_score = 0
 
 # Background
 bg_surface = pygame.image.load("assets/background-day.png").convert() # convert(): to make the image work with pygame more easily
