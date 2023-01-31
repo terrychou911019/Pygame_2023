@@ -2,14 +2,43 @@ import pygame, sys, random
 
 class GameState():
     def __init__(self):
-        self.state = "game"
+        self.state = "game_init"
+        self.game_init_image = pygame.image.load("assets/message.png").convert_alpha()
+        self.game_over_image = pygame.image.load("assets/gameover.png").convert_alpha()
 
     def state_manager(self):
+        if self.state == "game_init":
+            self.game_init()
         if self.state == "game":
             self.game()
         if self.state == "game_over":
             self.game_over()
 
+    def game_init(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:     
+                    pipe_group.empty()
+                    bird.y_pos = 216
+                    bird.y_movement = 0
+                    pygame.time.set_timer(CREATE_PIPE, 1200)
+                    global score
+                    score = 0
+                    self.state = "game"
+                if event.key == pygame.K_TAB:
+                    global DEBUG
+                    DEBUG = not DEBUG
+        
+        screen.blit(bg_surface, (0, 0))
+        floor_group.draw(screen)
+        floor_group.update()
+        screen.blit(self.game_init_image, (52, 122))
+        score_display(self.state)
+        pygame.display.update()
+            
     def game(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -17,7 +46,8 @@ class GameState():
                 sys.exit()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
-                    bird.y_movement = -6
+                    bird.y_movement = -5
+                    bird.flap_sound.play()
                 if event.key == pygame.K_TAB:
                     global DEBUG
                     DEBUG = not DEBUG
@@ -37,8 +67,8 @@ class GameState():
         floor_group.update()
         bird_group.draw(screen)
         bird_group.update(gravity)
-        global score
-        score += 0.01
+        #global score
+        #score += 0.01
         score_display(self.state)
         pygame.display.update()
 
@@ -48,19 +78,22 @@ class GameState():
                 pygame.quit()
                 sys.exit()
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_r:
-                    self.state = "game"
+                if event.key == pygame.K_SPACE:
+                    pygame.time.set_timer(CREATE_PIPE, 0) # remove the timer
                     pipe_group.empty()
                     bird.y_pos = 216
                     bird.y_movement = 0
-                    pygame.time.set_timer(CREATE_PIPE, 0) # remove the timer
-                    pygame.time.set_timer(CREATE_PIPE, 1200)
                     global score
                     score = 0
-                    
+                    self.state = "game_init"
+                if event.key == pygame.K_TAB:
+                    global DEBUG
+                    DEBUG = not DEBUG
+        
         screen.blit(bg_surface, (0, 0))
         floor_group.draw(screen)
         floor_group.update()
+        screen.blit(self.game_over_image, (48, 235))
         score_display(self.state)
         pygame.display.update()
 
@@ -91,12 +124,21 @@ class Bird(pygame.sprite.Sprite):
         self.image = self.sprites[self.current_sprite]
         self.rect = self.image.get_rect(center = (50, self.y_pos))
         self.y_movement = 0
+        self.flap_sound = pygame.mixer.Sound("sound/sfx_wing.wav")
+        self.death_sound = pygame.mixer.Sound("sound/sfx_hit.wav")
+        self.score_sound = pygame.mixer.Sound("sound/sfx_point.wav")
     
     def update(self, gravity):
-        if self.rect.top <= -50 or self.rect.bottom >= 450:
+        if self.rect.centery <= -50 or self.rect.centery >= 450:
             if not DEBUG:
                 game_state.state = "game_over"
-        
+                self.death_sound.play()
+                self.y_pos = 216
+        for pipe in pipe_group:
+            if self.rect.colliderect(pipe.rect):
+                if not DEBUG:
+                    game_state.state = "game_over"
+                    self.death_sound.play()
         self.regular_image = self.sprites[int(self.current_sprite)]
         self.y_movement += gravity
         self.y_pos += self.y_movement
@@ -113,6 +155,7 @@ class Pipe(pygame.sprite.Sprite):
         super().__init__()
         self.pos_x = 320
         self.pos_y = pipe_pos_y
+        self.scored = False
         self.is_bottom = is_bottom
         self.image = pygame.image.load("assets/pipe-green.png").convert()
         self.flip_image = pygame.transform.flip(self.image, False, True)
@@ -123,23 +166,32 @@ class Pipe(pygame.sprite.Sprite):
             self.rect = self.image.get_rect(midbottom = (self.pos_x, self.pos_y))
 
     def update(self):
-        if self.rect.colliderect(bird.rect):
-            if not DEBUG:
-                game_state.state = "game_over"
+        if not self.scored:
+            if abs(bird.rect.centerx - self.pos_x) < 10:
+                global score 
+                score += 0.5 # we have 2 pipes on same pos_x
+                bird.score_sound.play()
+                self.scored = True
         self.pos_x -= 2.5
         if self.is_bottom:
             self.rect = self.image.get_rect(midtop = (self.pos_x, self.pos_y))
         else:
             self.image = self.flip_image
             self.rect = self.image.get_rect(midbottom = (self.pos_x, self.pos_y))
+        if self.pos_x <= -100:
+            self.kill()
 
 def score_display(state):
+    global high_score
+    if state == "game_init":
+        high_score_surface = game_font.render("High Score: " + str(int(high_score)), True, "white")
+        high_score_rect = high_score_surface.get_rect(center = (144, 425))
+        screen.blit(high_score_surface, high_score_rect)
     if state == "game":
         score_surface = game_font.render(str(int(score)), True, "white")
         score_rect = score_surface.get_rect(center = (144, 50))
         screen.blit(score_surface, score_rect)
     if state == "game_over":
-        global high_score
         high_score = max(score, high_score)
         score_surface = game_font.render("Score: " + str(int(score)), True, "white")
         score_rect = score_surface.get_rect(center = (144, 50))
@@ -189,5 +241,4 @@ pipe_group = pygame.sprite.Group()
 # Game Loop
 while True:
     game_state.state_manager()
-    print(bird.y_pos)
     clock.tick(120)
